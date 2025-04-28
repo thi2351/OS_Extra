@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "rbtree.h": "c"
+        "rbtree.h": "c",
+        "compare": "c"
     }
 }
