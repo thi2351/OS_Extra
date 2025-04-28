@@ -3,14 +3,15 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <math.h>
 #include "rbtree.h"
 #include "common.h"
 #ifndef CFS_SCHED
 #define CFS_SCHED
 #endif
-#define SCHED_LATENCY_NSEC   20000000ULL
-#define MIN_GRANULARITY_NSEC 1000000ULL
-#define WEIGHT_NORM          1024ULL
+#define SCHED_LATENCY_NSEC   20ULL
+#define MIN_GRANULARITY_NSEC 10ULL
+#define WEIGHT_NORM          1024.0f
 
 struct cfs_rq {
     RBTree          *tree;

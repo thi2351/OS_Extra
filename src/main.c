@@ -95,7 +95,7 @@ void simulate_cfs(pcb_t *pcbs,
         /* Enqueue all that arrive at time t */
         for (int i = 0; i < n; i++) {
             if (!finished[i] && arrival[i] == (int)t) {
-                cfs_enqueue_task(&pcbs[i]);
+                cfs_enqueue(&pcbs[i]);
                 printf("[t=%4llu] enq PID=%u\n", (unsigned long long)t, pcbs[i].pid);
             }
         }
@@ -118,7 +118,7 @@ void simulate_cfs(pcb_t *pcbs,
 
         /* execute */
         remain[idx] -= (int)run_for;
-        cfs_update_curr(p, run_for);
+        cfs_update_vruntime(p, run_for);
         printf("[t=%4llu] run PID=%u for %4llu (rem=%d)\n",
                (unsigned long long)t, p->pid,
                (unsigned long long)run_for, remain[idx]);
@@ -126,7 +126,7 @@ void simulate_cfs(pcb_t *pcbs,
         t += run_for;
 
         if (remain[idx] == 0) {
-            cfs_dequeue_task(p);
+            cfs_dequeue(p);
             finished[idx] = true;
             done++;
             printf("[t=%4llu] fini PID=%u\n", (unsigned long long)t, p->pid);

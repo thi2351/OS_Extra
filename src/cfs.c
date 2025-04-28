@@ -1,5 +1,6 @@
 #include "cfs.h"   
 #include "rbtree.h"
+#include <math.h>
 #include <pthread.h>
 #include <stdlib.h>
 
@@ -31,9 +32,18 @@ void cfs_init_rq(void) {
 }
 
 uint32_t cfs_compute_weight(int nice) {
+    /* clamp nice vào [-20, 19] */
     if (nice < -20) nice = -20;
     if (nice >  19) nice = 19;
-    return (uint32_t)(WEIGHT_NORM << ((-nice) / 10));
+
+    /* exponent = (-nice) / 10.0 */
+    float exp = (-nice) / 10.0f;
+
+    /* weight = WEIGHT_NORM * 2^exp */
+    float w = WEIGHT_NORM * powf(2.0f, exp);
+
+    /* làm tròn xuống int (hoặc dùng roundf để làm tròn gần nhất) */
+    return (uint32_t)(w + 0.5f);
 }
 
 void cfs_enqueue(struct pcb_t *p) {
@@ -61,7 +71,7 @@ struct pcb_t *cfs_pick_next(void) {
 uint64_t cfs_timeslice(struct pcb_t *p) {
     uint64_t slice = (SCHED_LATENCY_NSEC * p->weight)
                      / (cfs_rq.total_weight ?: 1);
-    return max(slice, MIN_GRANULARITY_NSEC);
+    return (slice < MIN_GRANULARITY_NSEC ? MIN_GRANULARITY_NSEC : slice);
 }
 
 void cfs_update_vruntime(struct pcb_t *p, uint64_t delta_ns) {
