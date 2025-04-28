@@ -101,8 +101,8 @@ void simulate_cfs(pcb_t *pcbs,
         }
 
         /* Pick next */
-        pcb_t *p = cfs_pick_next_task();
-        if (!p) { t++; continue; }
+        pcb_t *p = cfs_pick_next();
+        if (!p) { t++; continue; } //Fix this, if !p, process the t into earliest time that have process running on CPU
         int idx = p - pcbs;
 
         uint64_t slice = cfs_timeslice(p);

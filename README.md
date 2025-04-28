@@ -10,3 +10,4 @@ Hàm main cần đạt:
 - Handle được idle (khoảng thời gian trống giữa các process thì time vẫn chạy, không có dừng lại mãi)
 - Handle được vấn đề khi 1 process đang chạy trong CPU, 1 process nữa đến thì phải enqueue process đó, hoàn tất chạy process đang chạy trong CPU, tính toán lại process tiếp theo được chạy trong CPU, cho process đó chạy.
 
+Dữ liệu: burst time tính theo ms -> 4000ms trong test01
