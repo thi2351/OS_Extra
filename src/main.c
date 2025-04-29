@@ -1,17 +1,18 @@
 #include "common.h"
-#include "cfs.h"    
+#include "cfs.h"
+#include "heap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <assert.h>
 
 /**
  * load_processes:
  *   - filename    : path to the input file
  *   - out_pcbs    : &pcb_t*      -> array of pcb_t
  *   - out_arrival : &int*        -> arrival times
- *   - out_burst   : &int*        -> burst times
  *   - out_remain  : &int*        -> remaining times
  *   - out_n       : &int         -> number of processes
  *
@@ -23,7 +24,6 @@
 void load_processes(const char *filename,
                     pcb_t   **out_pcbs,
                     int     **out_arrival,
-                    int     **out_burst,
                     int     **out_remain,
                     int     *out_n)
 {
@@ -43,9 +43,8 @@ void load_processes(const char *filename,
 
     *out_pcbs    = malloc(sizeof(pcb_t) * n);
     *out_arrival = malloc(sizeof(int)   * n);
-    *out_burst   = malloc(sizeof(int)   * n);
     *out_remain  = malloc(sizeof(int)   * n);
-    if (!*out_pcbs || !*out_arrival || !*out_burst || !*out_remain) {
+    if (!*out_pcbs || !*out_arrival || !*out_remain) {
         perror("malloc");
         fclose(fp);
         exit(EXIT_FAILURE);
@@ -65,96 +64,138 @@ void load_processes(const char *filename,
         (*out_pcbs)[i].pid      = (uint32_t)pid;
         (*out_pcbs)[i].vruntime = 0;
         (*out_pcbs)[i].weight   = cfs_compute_weight(nice);
-        (*out_arrival)[i] = at;
-        (*out_burst)[i]   = bt;
-        (*out_remain)[i]  = bt;
+        (*out_arrival)[i]       = at;
+        (*out_remain)[i]        = bt;
     }
 
     fclose(fp);
 }
 
+/* Arrival-event type for heap */
+typedef struct {
+    uint64_t time;   /* arrival timestamp */
+    pcb_t   *proc;   /* pointer to pcb_t */
+} arrival_event_t;
+
+/* Compare arrival events by time */
+static int arrival_cmp(const void *a, const void *b) {
+    const arrival_event_t *e1 = a;
+    const arrival_event_t *e2 = b;
+    if (e1->time < e2->time) return -1;
+    if (e1->time > e2->time) return  1;
+    return 0;
+}
+
 /**
- * simulate_cfs: Event-driven simulation of the CFS scheduler.
- * Uses cfs_timeslice(p) for slice calculation and CFS RQ API.
+ * simulate_cfs:
+ *   Event-driven CFS simulation:
+ *     - arrival-event heap for process arrivals
+ *     - uses CFS API: enqueue, pick_next, task_tick, dequeue
  */
-void simulate_cfs(pcb_t *pcbs,
-                  int   *arrival,
-                  int   *burst,
-                  int   *remain,
-                  int    n)
-{
-    /* Simplest ready array and current tracking */
-    bool *finished = calloc(n, sizeof(bool));
+void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
+    bool *finished = calloc((size_t)n, sizeof(bool));
     if (!finished) { perror("calloc"); exit(EXIT_FAILURE); }
 
+    /* Build min-heap of arrivals */
+    heap_t arrivals;
+    if (heap_init(&arrivals, sizeof(arrival_event_t), (size_t)n, arrival_cmp) != 0) {
+        perror("heap_init arrivals");
+        exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < n; i++) {
+        arrival_event_t ev = { .time = (uint64_t)arrival[i], .proc = &pcbs[i] };
+        heap_push(&arrivals, &ev);
+    }
+
     uint64_t t = 0;
-    int done = 0;
+    int done_count = 0;
 
-    /* Event: arrival times only, handle preemption between arrivals */
-    while (done < n) {
-        /* Enqueue all that arrive at time t */
-        for (int i = 0; i < n; i++) {
-            if (!finished[i] && arrival[i] == (int)t) {
-                cfs_enqueue(&pcbs[i]);
-                printf("[t=%4llu] enq PID=%u\n", (unsigned long long)t, pcbs[i].pid);
+    while (done_count < n) {
+        arrival_event_t ae;
+        /* Enqueue all processes arriving now */
+        while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
+            heap_pop(&arrivals, &ae);
+            cfs_enqueue(ae.proc);
+            printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
+        }
+
+        /* Pick next from CFS run-queue */
+        pcb_t *curr = cfs_pick_next();
+        if (!curr) {
+            /* Idle: jump to next arrival if any */
+            if (heap_pop(&arrivals, &ae) == 0) {
+                t = ae.time;
+                cfs_enqueue(ae.proc);
+                printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
+                continue;
             }
+            break;
         }
 
-        /* Pick next */
-        pcb_t *p = cfs_pick_next();
-        if (!p) { t++; continue; } //Fix this, if !p, process the t into earliest time that have process running on CPU
-        int idx = p - pcbs;
+        int idx = (int)(curr - pcbs);
+        assert(idx >= 0 && idx < n);
 
-        uint64_t slice = cfs_timeslice(p);
-        /* run until next arrival or slice or completion */
-        uint64_t next_at = UINT64_MAX;
-        for (int i = 0; i < n; i++) {
-            if (!finished[i] && arrival[i] > (int)t && (uint64_t)arrival[i] < next_at)
-                next_at = arrival[i];
+        /* Compute full slice and peek next arrival time */
+        uint64_t slice    = cfs_timeslice(curr);
+        uint64_t next_arr = UINT64_MAX;
+        if (heap_peek(&arrivals, &ae) == 0) {
+            next_arr = ae.time;
         }
+
+        /* Determine run duration: slice, remaining, or until next arrival */
         uint64_t run_for = slice;
-        if (remain[idx] < (int)run_for) run_for = remain[idx];
-        if (next_at < t + run_for) run_for = next_at - t;
+        if ((uint64_t)remain[idx] < run_for)      run_for = remain[idx];
+        if (t + run_for > next_arr)               run_for = next_arr - t;
 
-        /* execute */
+        /* Execute */
         remain[idx] -= (int)run_for;
-        cfs_update_vruntime(p, run_for);
-        printf("[t=%4llu] run PID=%u for %4llu (rem=%d)\n",
-               (unsigned long long)t, p->pid,
-               (unsigned long long)run_for, remain[idx]);
+        cfs_task_tick(curr, run_for);
+        printf("[t=%4llu] run  PID=%u for %4llu (rem=%d)\n",
+               (unsigned long long)t,
+               curr->pid,
+               (unsigned long long)run_for,
+               remain[idx]);
 
         t += run_for;
 
+        /* Enqueue any new arrivals at new t */
+        while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
+            heap_pop(&arrivals, &ae);
+            cfs_enqueue(ae.proc);
+            printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
+        }
+
+        /* If finished, dequeue and mark */
         if (remain[idx] == 0) {
-            cfs_dequeue(p);
+            cfs_dequeue(curr);
             finished[idx] = true;
-            done++;
-            printf("[t=%4llu] fini PID=%u\n", (unsigned long long)t, p->pid);
+            done_count++;
+            printf("[t=%4llu] finish PID=%u\n", (unsigned long long)t, curr->pid);
         }
     }
 
     printf("All done at t=%llu\n", (unsigned long long)t);
+
+    heap_free(&arrivals);
     free(finished);
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <input-file>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     pcb_t *pcbs;
-    int *arrival, *burst, *remain;
-    int  n;
+    int   *arrival, *remain;
+    int    n;
 
-    load_processes(argv[1], &pcbs, &arrival, &burst, &remain, &n);
+    load_processes(argv[1], &pcbs, &arrival, &remain, &n);
     cfs_init_rq();
-    simulate_cfs(pcbs, arrival, burst, remain, n);
+    simulate_cfs(pcbs, arrival, remain, n);
 
     free(pcbs);
     free(arrival);
-    free(burst);
     free(remain);
     return EXIT_SUCCESS;
 }

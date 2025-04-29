@@ -9,7 +9,7 @@
 #ifndef CFS_SCHED
 #define CFS_SCHED
 #endif
-#define SCHED_LATENCY_NSEC   20ULL
+#define SCHED_LATENCY_NSEC   200ULL
 #define MIN_GRANULARITY_NSEC 10ULL
 #define WEIGHT_NORM          1024.0f
 

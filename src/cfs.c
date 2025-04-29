@@ -7,12 +7,15 @@
 struct cfs_rq cfs_rq;
 
 static int cfs_cmp(void *a, void *b) {
+    //Sắp xếp: vruntime => weight => pid
     struct pcb_t *p1 = (struct pcb_t*)a;
     struct pcb_t *p2 = (struct pcb_t*)b;
     uint64_t v1 = p1->vruntime;
     uint64_t v2 = p2->vruntime;
     if (v1 < v2) return -1;
     if (v1 > v2) return 1;
+    if (p1->weight > p2->weight) return -1;
+    if (p1->weight < p2->weight) return 1;
     if (p1->pid < p2->pid) return -1;
     if (p1->pid > p2->pid) return 1;
     return 0;
@@ -31,19 +34,20 @@ void cfs_init_rq(void) {
     pthread_mutex_init(&cfs_rq.rq_lock, NULL);
 }
 
+static const uint32_t nice_to_weight[40] = {
+    88761, 71755, 56483, 46273, 36291, 29154, 23254, 18705, 14949, 11916,  /* -20 .. -11 */
+     9548,  7620,  6100,  4904,  3906,  3121,  2501,  1991,  1586,  1277,  /* -10 ..  -1 */
+     1024,   820,   655,   526,   423,   335,   272,   215,   172,   137,  /*   0 ..   9 */
+      110,    87,    70,    56,    45,    36,    29,    23,    18,    15   /*  10 ..  19 */
+};
+
+/**
+ * Tính weight từ nice [-20..+19] bằng lookup table.
+ */
 uint32_t cfs_compute_weight(int nice) {
-    /* clamp nice vào [-20, 19] */
     if (nice < -20) nice = -20;
-    if (nice >  19) nice = 19;
-
-    /* exponent = (-nice) / 10.0 */
-    float exp = (-nice) / 10.0f;
-
-    /* weight = WEIGHT_NORM * 2^exp */
-    float w = WEIGHT_NORM * powf(2.0f, exp);
-
-    /* làm tròn xuống int (hoặc dùng roundf để làm tròn gần nhất) */
-    return (uint32_t)(w + 0.5f);
+    if (nice >  19) nice =  19;
+    return nice_to_weight[nice + 20];
 }
 
 void cfs_enqueue(struct pcb_t *p) {

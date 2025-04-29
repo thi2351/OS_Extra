@@ -2,7 +2,7 @@
 
 # Toolchain
 CC      := gcc
-CFLAGS  := -std=c11 -Wall -Wextra -g -Iinclude
+CFLAGS  := -std=c17 -Wall -Wextra -g -Iinclude
 
 # Linker flags: math lib + define __ImageBase
 LDFLAGS := -lm -Wl,--defsym,__ImageBase=0

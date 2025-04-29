@@ -247,6 +247,10 @@ void* rbtree_search(RBTree* tree, void* key) {
 // Constructor
 RBTree* new_rbtree(CmpOp cmpop, CloneFunc clone_data, FreeFunc free_data) {
     RBTree* tree = malloc(sizeof(RBTree));
+    if (!tree) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
     tree->root = NULL;
     tree->cmpop = cmpop;
     tree->clone_data = clone_data;
