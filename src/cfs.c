@@ -73,7 +73,7 @@ pcb_t *cfs_pick_next(void) {
 }
 
 uint64_t cfs_timeslice(pcb_t *p) {
-    uint64_t total = cfs_rq.total_weight ? cfs_rq.total_weight  : 1;
+    uint64_t total = cfs_rq.total_weight ? cfs_rq.total_weight : 1;
     uint64_t slice = (SCHED_LATENCY_NSEC * p->weight) / total;
     return (slice < MIN_GRANULARITY_NSEC ? MIN_GRANULARITY_NSEC : slice);
 }

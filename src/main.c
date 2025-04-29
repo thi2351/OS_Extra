@@ -8,6 +8,19 @@
 #include <limits.h>
 #include <assert.h>
 
+typedef struct {
+    uint64_t time;
+    pcb_t   *proc;
+} arrival_event_t;
+
+static int arrival_cmp(const void *a, const void *b) {
+    const arrival_event_t *e1 = a;
+    const arrival_event_t *e2 = b;
+    if (e1->time < e2->time) return -1;
+    if (e1->time > e2->time) return  1;
+    return 0;
+}
+
 void load_processes(const char *filename,
                     pcb_t   **out_pcbs,
                     int     **out_arrival,
@@ -36,9 +49,7 @@ void load_processes(const char *filename,
         int pid, nice, at, bt;
         if (fscanf(fp, "%d %d %d %d", &pid, &nice, &at, &bt) != 4
             || nice < -20 || nice > 19) {
-            fprintf(stderr,
-                    "Error: bad format or niceness out of range at line %d in '%s'\n",
-                    i + 2, filename);
+            fprintf(stderr, "Error: bad format or niceness out of range at line %d in '%s'\n", i+2, filename);
             fclose(fp);
             exit(EXIT_FAILURE);
         }
@@ -51,36 +62,21 @@ void load_processes(const char *filename,
     fclose(fp);
 }
 
-typedef struct {
-    uint64_t time;
-    pcb_t   *proc;
-} arrival_event_t;
-
-static int arrival_cmp(const void *a, const void *b) {
-    const arrival_event_t *e1 = a;
-    const arrival_event_t *e2 = b;
-    if (e1->time < e2->time) return -1;
-    if (e1->time > e2->time) return  1;
-    return 0;
-}
-
 void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
     bool *finished = calloc(n, sizeof(bool));
     if (!finished) { perror("calloc"); exit(EXIT_FAILURE); }
 
     heap_t arrivals;
-    if (heap_init(&arrivals, sizeof(arrival_event_t), n, arrival_cmp) != 0) {
-        perror("heap_init arrivals"); exit(EXIT_FAILURE);
-    }
+    heap_init(&arrivals, sizeof(arrival_event_t), n, arrival_cmp);
     for (int i = 0; i < n; i++) {
         arrival_event_t ev = { .time = (uint64_t)arrival[i], .proc = &pcbs[i] };
         heap_push(&arrivals, &ev);
     }
 
     uint64_t t = 0;
-    int done_count = 0;
+    int done = 0;
 
-    while (done_count < n) {
+    while (done < n) {
         arrival_event_t ae;
         while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
             heap_pop(&arrivals, &ae);
@@ -94,52 +90,77 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
                 t = ae.time;
                 cfs_enqueue(ae.proc);
                 printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
+                printf("\n");
                 continue;
             }
             break;
         }
 
-        int idx = (int)(curr - pcbs);
+                int idx = (int)(curr - pcbs);
         assert(idx >= 0 && idx < n);
 
         uint64_t slice = cfs_timeslice(curr);
-        uint64_t next_arr = UINT64_MAX;
-        if (heap_peek(&arrivals, &ae) == 0) next_arr = ae.time;
+        uint64_t rem = remain[idx];
+        uint64_t run_total = slice < rem ? slice : rem;
+        uint64_t run_done = 0;
 
-        uint64_t run_for = slice;
-        if ((uint64_t)remain[idx] < run_for) run_for = remain[idx];
-        if (t + run_for > next_arr) run_for = next_arr - t;
+        arrival_event_t ae2;
+        while (run_done < run_total) {
+            uint64_t next_arr = UINT64_MAX;
+            if (heap_peek(&arrivals, &ae2) == 0) next_arr = ae2.time;
 
-        remain[idx] -= (int)run_for;
-        cfs_task_tick(curr, run_for);
-        printf("[t=%4llu] run  PID=%u for %4llu (rem=%d)\n",
-               (unsigned long long)t, curr->pid,
-               (unsigned long long)run_for, remain[idx]);
+            uint64_t t_until_arr = next_arr > t ? next_arr - t : 0;
+            uint64_t to_run = run_total - run_done;
+            if (t_until_arr > 0 && to_run > t_until_arr)
+                to_run = t_until_arr;
 
-        t += run_for;
+            // execute to_run
+            remain[idx] -= (int)to_run;
+            // cfs_task_tick(curr, to_run);
+            printf("[t=%4llu] run PID=%u for %4llu (rem=%d)",
+                   (unsigned long long)t, curr->pid,
+                   (unsigned long long)to_run, remain[idx]);
+            printf("\n");
 
-        printf(" VRUNTIMES: ");
-        for (int i = 0; i < n; i++) {
-            printf("[PID=%u: vruntime=%.2f] ", pcbs[i].pid, pcbs[i].vruntime);
-        }
-        printf("\n");
-        while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
-            heap_pop(&arrivals, &ae);
-            cfs_enqueue(ae.proc);
-            printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
+            t += to_run;
+            run_done += to_run;
+
+            // handle any arrivals exactly at new time t
+            while (heap_peek(&arrivals, &ae2) == 0 && ae2.time == t) {
+                heap_pop(&arrivals, &ae2);
+                cfs_enqueue(ae2.proc);
+                printf("[t=%4llu] enqueue PID=%u", (unsigned long long)t, ae2.proc->pid);
+                printf("\n");
+            }
+            if (run_done == run_total) {
+                cfs_task_tick(curr, run_done);
+                continue;
+            }
+            // compare curr vs best (without updated vruntime for curr)
+            pcb_t *best = cfs_pick_next();
+            if (best != curr) {
+                printf("[t=%4llu] preempt PID=%u -> PID=%u", (unsigned long long)t, curr->pid, best->pid);
+                printf("\n");
+                cfs_task_tick(curr, run_done);
+                curr = best;
+                idx = (int)(curr - pcbs);
+                slice = cfs_timeslice(curr);
+                rem = remain[idx];
+                run_total = slice < rem ? slice : rem;
+                run_done = 0;
+                break; 
+            }
         }
 
         if (remain[idx] == 0) {
             cfs_dequeue(curr);
             finished[idx] = true;
-            done_count++;
+            done++;
             printf("[t=%4llu] finish PID=%u\n", (unsigned long long)t, curr->pid);
-            printf("\n");
         }
     }
 
     printf("All done at t=%llu\n", (unsigned long long)t);
-
     heap_free(&arrivals);
     free(finished);
 }
