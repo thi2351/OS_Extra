@@ -114,12 +114,9 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
             if (t_until_arr > 0 && to_run > t_until_arr)
                 to_run = t_until_arr;
 
-            // execute to_run
-            remain[idx] -= (int)to_run;
-            // cfs_task_tick(curr, to_run);
-            printf("[t=%4llu] run PID=%u for %4llu (rem=%d)",
+            printf("[t=%4llu] run PID=%u for %4llu",
                    (unsigned long long)t, curr->pid,
-                   (unsigned long long)to_run, remain[idx]);
+                   (unsigned long long)to_run);
             printf("\n");
 
             t += to_run;
@@ -131,9 +128,11 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
                 cfs_enqueue(ae2.proc);
                 printf("[t=%4llu] enqueue PID=%u", (unsigned long long)t, ae2.proc->pid);
                 printf("\n");
+                run_total = cfs_timeslice(curr);
             }
-            if (run_done == run_total) {
+            if (run_done >= run_total) {
                 cfs_task_tick(curr, run_done);
+                remain[idx] -= (int)run_done;
                 continue;
             }
             // compare curr vs best (without updated vruntime for curr)
@@ -142,6 +141,8 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
                 printf("[t=%4llu] preempt PID=%u -> PID=%u", (unsigned long long)t, curr->pid, best->pid);
                 printf("\n");
                 cfs_task_tick(curr, run_done);
+                remain[idx] -= (int)run_done;
+
                 curr = best;
                 idx = (int)(curr - pcbs);
                 slice = cfs_timeslice(curr);
