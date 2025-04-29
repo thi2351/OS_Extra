@@ -8,7 +8,7 @@
 
 typedef struct pcb_t {
     uint32_t pid;
-    uint64_t vruntime;
+    double    vruntime;
     uint32_t weight;
 } pcb_t;
 

@@ -8,19 +8,6 @@
 #include <limits.h>
 #include <assert.h>
 
-/**
- * load_processes:
- *   - filename    : path to the input file
- *   - out_pcbs    : &pcb_t*      -> array of pcb_t
- *   - out_arrival : &int*        -> arrival times
- *   - out_remain  : &int*        -> remaining times
- *   - out_n       : &int         -> number of processes
- *
- * File format:
- *   n
- *   pid niceness arrival_time burst_time
- *   ...
- */
 void load_processes(const char *filename,
                     pcb_t   **out_pcbs,
                     int     **out_arrival,
@@ -28,10 +15,7 @@ void load_processes(const char *filename,
                     int     *out_n)
 {
     FILE *fp = fopen(filename, "r");
-    if (!fp) {
-        perror("fopen");
-        exit(EXIT_FAILURE);
-    }
+    if (!fp) { perror("fopen"); exit(EXIT_FAILURE); }
 
     int n;
     if (fscanf(fp, "%d", &n) != 1 || n <= 0) {
@@ -45,9 +29,7 @@ void load_processes(const char *filename,
     *out_arrival = malloc(sizeof(int)   * n);
     *out_remain  = malloc(sizeof(int)   * n);
     if (!*out_pcbs || !*out_arrival || !*out_remain) {
-        perror("malloc");
-        fclose(fp);
-        exit(EXIT_FAILURE);
+        perror("malloc"); fclose(fp); exit(EXIT_FAILURE);
     }
 
     for (int i = 0; i < n; i++) {
@@ -60,24 +42,20 @@ void load_processes(const char *filename,
             fclose(fp);
             exit(EXIT_FAILURE);
         }
-
         (*out_pcbs)[i].pid      = (uint32_t)pid;
         (*out_pcbs)[i].vruntime = 0;
         (*out_pcbs)[i].weight   = cfs_compute_weight(nice);
         (*out_arrival)[i]       = at;
         (*out_remain)[i]        = bt;
     }
-
     fclose(fp);
 }
 
-/* Arrival-event type for heap */
 typedef struct {
-    uint64_t time;   /* arrival timestamp */
-    pcb_t   *proc;   /* pointer to pcb_t */
+    uint64_t time;
+    pcb_t   *proc;
 } arrival_event_t;
 
-/* Compare arrival events by time */
 static int arrival_cmp(const void *a, const void *b) {
     const arrival_event_t *e1 = a;
     const arrival_event_t *e2 = b;
@@ -86,21 +64,13 @@ static int arrival_cmp(const void *a, const void *b) {
     return 0;
 }
 
-/**
- * simulate_cfs:
- *   Event-driven CFS simulation:
- *     - arrival-event heap for process arrivals
- *     - uses CFS API: enqueue, pick_next, task_tick, dequeue
- */
 void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
-    bool *finished = calloc((size_t)n, sizeof(bool));
+    bool *finished = calloc(n, sizeof(bool));
     if (!finished) { perror("calloc"); exit(EXIT_FAILURE); }
 
-    /* Build min-heap of arrivals */
     heap_t arrivals;
-    if (heap_init(&arrivals, sizeof(arrival_event_t), (size_t)n, arrival_cmp) != 0) {
-        perror("heap_init arrivals");
-        exit(EXIT_FAILURE);
+    if (heap_init(&arrivals, sizeof(arrival_event_t), n, arrival_cmp) != 0) {
+        perror("heap_init arrivals"); exit(EXIT_FAILURE);
     }
     for (int i = 0; i < n; i++) {
         arrival_event_t ev = { .time = (uint64_t)arrival[i], .proc = &pcbs[i] };
@@ -112,17 +82,14 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
 
     while (done_count < n) {
         arrival_event_t ae;
-        /* Enqueue all processes arriving now */
         while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
             heap_pop(&arrivals, &ae);
             cfs_enqueue(ae.proc);
             printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
         }
 
-        /* Pick next from CFS run-queue */
         pcb_t *curr = cfs_pick_next();
         if (!curr) {
-            /* Idle: jump to next arrival if any */
             if (heap_pop(&arrivals, &ae) == 0) {
                 t = ae.time;
                 cfs_enqueue(ae.proc);
@@ -135,42 +102,39 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
         int idx = (int)(curr - pcbs);
         assert(idx >= 0 && idx < n);
 
-        /* Compute full slice and peek next arrival time */
-        uint64_t slice    = cfs_timeslice(curr);
+        uint64_t slice = cfs_timeslice(curr);
         uint64_t next_arr = UINT64_MAX;
-        if (heap_peek(&arrivals, &ae) == 0) {
-            next_arr = ae.time;
-        }
+        if (heap_peek(&arrivals, &ae) == 0) next_arr = ae.time;
 
-        /* Determine run duration: slice, remaining, or until next arrival */
         uint64_t run_for = slice;
-        if ((uint64_t)remain[idx] < run_for)      run_for = remain[idx];
-        if (t + run_for > next_arr)               run_for = next_arr - t;
+        if ((uint64_t)remain[idx] < run_for) run_for = remain[idx];
+        if (t + run_for > next_arr) run_for = next_arr - t;
 
-        /* Execute */
         remain[idx] -= (int)run_for;
         cfs_task_tick(curr, run_for);
         printf("[t=%4llu] run  PID=%u for %4llu (rem=%d)\n",
-               (unsigned long long)t,
-               curr->pid,
-               (unsigned long long)run_for,
-               remain[idx]);
+               (unsigned long long)t, curr->pid,
+               (unsigned long long)run_for, remain[idx]);
 
         t += run_for;
 
-        /* Enqueue any new arrivals at new t */
+        printf(" VRUNTIMES: ");
+        for (int i = 0; i < n; i++) {
+            printf("[PID=%u: vruntime=%.2f] ", pcbs[i].pid, pcbs[i].vruntime);
+        }
+        printf("\n");
         while (heap_peek(&arrivals, &ae) == 0 && ae.time == t) {
             heap_pop(&arrivals, &ae);
             cfs_enqueue(ae.proc);
             printf("[t=%4llu] enqueue PID=%u\n", (unsigned long long)t, ae.proc->pid);
         }
 
-        /* If finished, dequeue and mark */
         if (remain[idx] == 0) {
             cfs_dequeue(curr);
             finished[idx] = true;
             done_count++;
             printf("[t=%4llu] finish PID=%u\n", (unsigned long long)t, curr->pid);
+            printf("\n");
         }
     }
 
