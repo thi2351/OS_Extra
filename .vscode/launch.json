@@ -9,7 +9,7 @@
         "request": "launch",
         "program": "${workspaceFolder}/simulate_cfs",
         "args": [
-          "${workspaceFolder}/testcase/test01.txt"
+          "${workspaceFolder}/testcase/tc03_staggered_arrival.in"
         ],
         "stopAtEntry": false,              // don’t stop at main()
         "cwd": "${workspaceFolder}",       // working directory for the program

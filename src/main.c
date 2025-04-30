@@ -128,7 +128,8 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int n) {
                 cfs_enqueue(ae2.proc);
                 printf("[t=%4llu] enqueue PID=%u", (unsigned long long)t, ae2.proc->pid);
                 printf("\n");
-                run_total = cfs_timeslice(curr);
+                uint32_t time_slice = cfs_timeslice(curr);
+                run_total = time_slice < remain[idx] ? time_slice : remain[idx];
             }
             if (run_done >= run_total) {
                 cfs_task_tick(curr, run_done);

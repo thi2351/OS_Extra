@@ -1,67 +1,107 @@
 #!/usr/bin/env python3
 """
-Extracts metrics from simulate_cfs textual logs.
+parse_cfs.py  –  extract metrics & (optionally) Gantt charts
+from simulate_cfs logs.
 
-Output options:
-  --csv   <file>   write per-PID metrics as CSV
-  --gantt <file>   draw a Gantt chart (requires matplotlib)
-  --print-avg      print "WT  TAT" (average waiting / turnaround)
+USAGE
+  python3 parse_cfs.py LOGFILE [options]
+
+OPTIONS
+  --csv   <file>   write per-PID metrics CSV
+  --gantt <png>    produce Gantt chart (needs matplotlib)
+  --avg            print "AVG_WT AVG_TAT" to stdout
+  --quiet          suppress detailed per-PID printing
+
+CSV columns: PID,Arrival,Burst,Turnaround,Waiting
 """
-import re, sys, csv, argparse, collections, matplotlib.pyplot as plt
-pat_run    = re.compile(r'\[t=(\d+)] run PID=(\d+) for (\d+)')
-pat_finish = re.compile(r'\[t=(\d+)] finish PID=(\d+)')
-pat_enq    = re.compile(r'\[t=(\d+)] enqueue PID=(\d+)')
 
-def parse(path):
-    arrival, runs, finish = {}, collections.defaultdict(list), {}
-    with open(path) as f:
-        for line in f:
-            if m:=pat_enq.search(line):   arrival.setdefault(int(m[2]), int(m[1]))
-            if m:=pat_run.search(line):   runs[int(m[2])].append((int(m[1]), int(m[3])))
-            if m:=pat_finish.search(line):finish[int(m[2])] = int(m[1])
+from __future__ import annotations
+import re, csv, argparse, sys, statistics, textwrap, collections, pathlib
+
+# ── log-line regex ────────────────────────────────────────────
+_RE_RUN    = re.compile(r'\[t=\s*(\d+)] run PID=(\d+) for\s*(\d+)')
+_RE_ENQ    = re.compile(r'\[t=\s*(\d+)] enqueue PID=(\d+)')
+_RE_FINISH = re.compile(r'\[t=\s*(\d+)] finish PID=(\d+)')
+
+# ── parse one logfile ─────────────────────────────────────────
+def parse_log(path: str):
+    arrival, finish = {}, {}
+    runs: dict[int, list[tuple[int,int]]] = collections.defaultdict(list)
+
+    with open(path, encoding='utf-8') as f:
+        for ln in f:
+            if m := _RE_ENQ.search(ln):
+                arrival.setdefault(int(m[2]), int(m[1]))
+            elif m := _RE_RUN.search(ln):
+                runs[int(m[2])].append((int(m[1]), int(m[3])))
+            elif m := _RE_FINISH.search(ln):
+                finish[int(m[2])] = int(m[1])
+
+    missing = [p for p in arrival if p not in finish]
+    if missing:
+        raise ValueError(f"{path}: PIDs never finished → {missing}")
     return arrival, runs, finish
 
-def metrics(arrival, runs, finish):
+# ── metric table ──────────────────────────────────────────────
+def metrics(arrival,runs,finish):
     rows=[]
     for pid in sorted(arrival):
         burst = sum(d for _,d in runs[pid])
-        tat   = finish[pid]-arrival[pid]
-        wt    = tat-burst
-        rows.append((pid,arrival[pid],burst,tat,wt))
+        tat   = finish[pid] - arrival[pid]
+        wt    = tat - burst
+        rows.append((pid, arrival[pid], burst, tat, wt))
     return rows
 
-def gantt(rows, runs, outpng):
-    fig,ax=plt.subplots()
-    yticks,ylabels = [],[]
-    for i,(pid,_,_,_,_) in enumerate(rows):
-        start=0
-        for t,d in runs[pid]:
-            ax.broken_barh([(t,d)], (i-0.4,0.8))
-        yticks.append(i)
-        ylabels.append(f"PID{pid}")
-    ax.set_yticks(yticks); ax.set_yticklabels(ylabels)
-    ax.set_xlabel("time (ns)"); ax.set_title(outpng.rsplit('/',1)[-1])
-    fig.tight_layout(); fig.savefig(outpng); plt.close(fig)
+# ── gantt helper ──────────────────────────────────────────────
+def gantt(rows,runs,out_png):
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib required for --gantt (pip install matplotlib)")
+    fig,ax = plt.subplots(figsize=(8, 0.5 + 0.4*len(rows)))
+    yticks,labels=[],[]
+    for i,(pid,*_) in enumerate(rows):
+        for s,d in runs[pid]:
+            ax.broken_barh([(s,d)], (i-0.4,0.8))
+        yticks.append(i); labels.append(f"PID{pid}")
+    ax.set_yticks(yticks); ax.set_yticklabels(labels)
+    ax.set_xlabel("time (ns)")
+    ax.set_title(pathlib.Path(out_png).name)
+    fig.tight_layout(); fig.savefig(out_png); plt.close(fig)
 
+# ── command-line interface ────────────────────────────────────
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("log")
-    ap.add_argument("--csv"); ap.add_argument("--gantt")
-    ap.add_argument("--print-avg", action="store_true")
+    ap = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent(__doc__))
+    ap.add_argument("log")
+    ap.add_argument("--csv")
+    ap.add_argument("--gantt")
+    ap.add_argument("--avg", action="store_true")
     ap.add_argument("--quiet", action="store_true")
-    a=ap.parse_args()
-    arr,runs,fin = parse(a.log)
-    rows = metrics(arr,runs,fin)
-    if a.csv:
-        with open(a.csv,"w",newline="") as f:
-            w=csv.writer(f); w.writerow(
-            ("PID","Arrival","Burst","Turnaround","Waiting"))
-            w.writerows(rows)
-    if a.gantt: gantt(rows,runs,a.gantt)
-    if not a.quiet:
-        for r in rows: print(r)
-    if a.print_avg:
-        avgW=sum(r[4] for r in rows)/len(rows)
-        avgT=sum(r[3] for r in rows)/len(rows)
-        print(f"{avgW:.2f} {avgT:.2f}")
+    args = ap.parse_args()
 
-if __name__=="__main__": main()
+    arr,runs,fin = parse_log(args.log)
+    rows = metrics(arr,runs,fin)
+
+    if args.csv:
+        with open(args.csv,"w",newline='') as f:
+            w=csv.writer(f)
+            w.writerow(("PID","Arrival","Burst","Turnaround","Waiting"))
+            w.writerows(rows)
+
+    if args.gantt:
+        gantt(rows,runs,args.gantt)
+
+    if not args.quiet:
+        for r in rows:
+            print(f"PID {r[0]:>3} | arr={r[1]:>5}  burst={r[2]:>4}  "
+                  f"TAT={r[3]:>5}  WT={r[4]:>5}")
+
+    if args.avg:
+        wt = statistics.fmean(r[4] for r in rows)
+        tat= statistics.fmean(r[3] for r in rows)
+        print(f"{wt:.2f} {tat:.2f}")
+
+if __name__ == "__main__":
+    main()
