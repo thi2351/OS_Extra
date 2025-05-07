@@ -1,0 +1,22 @@
+[t=   0] enqueue PID=1
+[t=   0] run PID=1 for    8
+[t=   8] enqueue PID=2
+[t=   8] preempt PID=1 -> PID=2
+[t=   8] run PID=2 for    7
+[t=  15] enqueue PID=3
+[t=  15] run PID=2 for   10
+[t=  25] enqueue PID=4
+[t=  25] run PID=2 for   15
+[t=  40] enqueue PID=5
+[t=  40] run PID=2 for    8
+[t=  48] finish PID=2
+[t=  48] run PID=5 for   20
+[t=  68] finish PID=5
+[t=  68] run PID=4 for   30
+[t=  98] finish PID=4
+[t=  98] run PID=3 for   49
+[t= 147] run PID=1 for  112
+[t= 259] finish PID=1
+[t= 259] run PID=3 for   11
+[t= 270] finish PID=3
+All done at t=270

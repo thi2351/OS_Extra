@@ -1,0 +1,23 @@
+[t=   0] enqueue PID=1
+[t=   0] enqueue PID=2
+[t=   0] run PID=1 for   10
+[t=  10] enqueue PID=3
+[t=  10] run PID=1 for   10
+[t=  20] enqueue PID=4
+[t=  20] run PID=1 for   15
+[t=  35] enqueue PID=5
+[t=  35] run PID=1 for   15
+[t=  50] enqueue PID=6
+[t=  50] run PID=1 for   50
+[t= 100] finish PID=1
+[t= 100] run PID=4 for   80
+[t= 180] finish PID=4
+[t= 180] run PID=2 for   60
+[t= 240] finish PID=2
+[t= 240] run PID=6 for   50
+[t= 290] finish PID=6
+[t= 290] run PID=3 for   30
+[t= 320] finish PID=3
+[t= 320] run PID=5 for   10
+[t= 330] finish PID=5
+All done at t=330
