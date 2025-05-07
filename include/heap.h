@@ -10,12 +10,6 @@ typedef struct {
     size_t  size;       /* number of elements in heap */
     size_t  capacity;   /* allocated capacity */
     size_t  elem_size;  /* size of each element */
-    /**
-     * Comparison function:
-     *   return <0 if a < b,
-     *          =0 if a == b,
-     *          >0 if a > b
-     */
     int    (*cmp)(const void *a, const void *b);
 } heap_t;
 
