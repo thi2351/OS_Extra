@@ -1,31 +1,21 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    "version": "0.2.0",
-    "configurations": [
-      {
-        "name": "Debug simulate_cfs",
-        "type": "cppdbg",                  // use the C/C++ extension’s debugger
-        "request": "launch",
-        "program": "${workspaceFolder}/simulate_cfs",
-        "args": [
-          "${workspaceFolder}/testcase/test01.txt"
-        ],
-        "stopAtEntry": false,              // don’t stop at main()
-        "cwd": "${workspaceFolder}",       // working directory for the program
-        "environment": [],
-        "externalConsole": false,          // use integrated console
-        "MIMode": "gdb",                   // on Windows with MinGW or on Linux/WSL
-        "miDebuggerPath": "gdb",           // adjust if gdb is in a different location
-        "setupCommands": [
-          {
-            "description": "Enable pretty-printing for gdb",
-            "text": "-enable-pretty-printing",
-            "ignoreFailures": true
-          }
-        ],
-        "preLaunchTask": "build simulate_cfs"
-      }
-    ]
-  }
-  
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug simulate_cfs",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/simulate_cfs",
+      "args": [ "testcase/test02.txt" ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "build"
+    }
+  ]
+}

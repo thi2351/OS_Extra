@@ -23,8 +23,8 @@ uint32_t cfs_compute_weight(int nice);
 void     cfs_enqueue(pcb_t *p);
 void     cfs_dequeue(pcb_t *p);
 pcb_t   *cfs_pick_next(void);
-uint64_t cfs_timeslice(pcb_t *p);
-void     cfs_update_vruntime(pcb_t *p, uint64_t delta_ns);
-void     cfs_task_tick(pcb_t *p, uint64_t elapsed_ns);
+uint64_t cfs_timeslice(pcb_t *p, uint32_t extern_weight);
+void     cfs_update_vruntime(pcb_t *p, uint64_t delta_ns, uint32_t extern_weight);
+void     cfs_task_tick(pcb_t *p, uint64_t elapsed_ns, uint32_t extern_weight);
 
 #endif

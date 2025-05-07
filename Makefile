@@ -40,4 +40,4 @@ clean:
 
 # Run with a sample testcase (adjust path as needed)
 run: all
-	./$(BIN) testcase/test01.txt
+	./$(BIN) testcase/test02.txt

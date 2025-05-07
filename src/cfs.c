@@ -72,21 +72,21 @@ pcb_t *cfs_pick_next(void) {
     return p;
 }
 
-uint64_t cfs_timeslice(pcb_t *p) {
-    uint64_t total = cfs_rq.total_weight ? cfs_rq.total_weight : 1;
+uint64_t cfs_timeslice(pcb_t *p, uint32_t extern_weight) {
+    uint64_t total = (cfs_rq.total_weight + extern_weight) ? (cfs_rq.total_weight + extern_weight) : 1;
     uint64_t slice = (SCHED_LATENCY_NSEC * p->weight) / total;
     return (slice < MIN_GRANULARITY_NSEC ? MIN_GRANULARITY_NSEC : slice);
 }
 
-void cfs_update_vruntime(pcb_t *p, uint64_t delta_ns) {
+void cfs_update_vruntime(pcb_t *p, uint64_t delta_ns, uint32_t extern_weight) {
     // virtual runtime is double now
-    double proportion = (double)delta_ns * WEIGHT_NORM / (double)p->weight;
+    double proportion = (double)delta_ns * WEIGHT_NORM / (double)(p->weight + extern_weight);
     p->vruntime += proportion;
 }
 
-void cfs_task_tick(pcb_t *p, uint64_t elapsed_ns) {
+void cfs_task_tick(pcb_t *p, uint64_t elapsed_ns, uint32_t extern_weight) {
     if (!p) return;
-    cfs_dequeue(p);
-    cfs_update_vruntime(p, elapsed_ns);
+    // cfs_dequeue(p);
+    cfs_update_vruntime(p, elapsed_ns, extern_weight);
     cfs_enqueue(p);
 }
