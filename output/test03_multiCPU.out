@@ -1,0 +1,25 @@
+[t = 0] Enqueue PID=2 
+[t = 0] Enqueue PID=3 
+[t = 0] Enqueue PID=4 
+[t = 0] Assigned process with PID=2 to CPU 1
+[t = 0] Assigned process with PID=3 to CPU 2
+[t = 0] Assigned process with PID=4 to CPU 3
+[t = 42] Enqueue PID=1 
+[t = 42] Stopped PID=3 in CPU 2
+[t = 42] Stopped PID=4 in CPU 3
+[t = 42] Assigned process with PID=1 to CPU 2
+[t = 42] Assigned process with PID=3 to CPU 3
+[t = 63] Stopped PID=2 in CPU 1
+[t = 63] Assigned process with PID=2 to CPU 1
+[t = 82] Stopped PID=3 in CPU 3
+[t = 82] Assigned process with PID=4 to CPU 3
+[t = 100] Finish PID=2
+[t = 100] Assigned process with PID=3 to CPU 1
+[t = 105] Stopped PID=1 in CPU 2
+[t = 105] Assigned process with PID=1 to CPU 2
+[t = 114] Stopped PID=4 in CPU 3
+[t = 114] Assigned process with PID=4 to CPU 3
+[t = 118] Finish PID=3
+[t = 140] Finish PID=4
+[t = 142] Finish PID=1
+All done at t = 142

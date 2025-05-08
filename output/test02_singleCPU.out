@@ -1,0 +1,9 @@
+[t = 0] Enqueue PID=1 
+[t = 0] Assigned process with PID=1 to CPU 1
+[t = 90] Enqueue PID=2 
+[t = 90] Stopped PID=1 in CPU 1
+[t = 90] Assigned process with PID=2 to CPU 1
+[t = 92] Finish PID=2
+[t = 92] Assigned process with PID=1 to CPU 1
+[t = 102] Finish PID=1
+All done at t = 102
