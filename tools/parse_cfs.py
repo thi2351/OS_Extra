@@ -1,107 +1,101 @@
 #!/usr/bin/env python3
 """
-parse_cfs.py  –  extract metrics & (optionally) Gantt charts
-from simulate_cfs logs.
+parse_cfs.py – extract metrics & (optionally) Gantt charts
+from logs in format:
+
+  [t = 0] Enqueue PID=2
+  [t = 0] Assigned process with PID=2 to CPU 1
+  [t = 200] Stopped PID=2 in CPU 1
+  [t = 400] Finish PID=2
 
 USAGE
-  python3 parse_cfs.py LOGFILE [options]
-
-OPTIONS
-  --csv   <file>   write per-PID metrics CSV
-  --gantt <png>    produce Gantt chart (needs matplotlib)
-  --avg            print "AVG_WT AVG_TAT" to stdout
-  --quiet          suppress detailed per-PID printing
-
-CSV columns: PID,Arrival,Burst,Turnaround,Waiting
+  python3 parse_cfs.py LOGFILE [--csv file] [--gantt file] [--avg] [--quiet]
 """
 
-from __future__ import annotations
 import re, csv, argparse, sys, statistics, textwrap, collections, pathlib
 
-# ── log-line regex ────────────────────────────────────────────
-_RE_RUN    = re.compile(r'\[t=\s*(\d+)] run PID=(\d+) for\s*(\d+)')
-_RE_ENQ    = re.compile(r'\[t=\s*(\d+)] enqueue PID=(\d+)')
-_RE_FINISH = re.compile(r'\[t=\s*(\d+)] finish PID=(\d+)')
+_RE_ENQ    = re.compile(r'\[t\s*=\s*(\d+)] Enqueue PID=(\d+)')
+_RE_ASSIGN = re.compile(r'\[t\s*=\s*(\d+)] Assigned process with PID=(\d+) to CPU (\d+)')
+_RE_STOP   = re.compile(r'\[t\s*=\s*(\d+)] Stopped PID=(\d+) in CPU (\d+)')
+_RE_FINISH = re.compile(r'\[t\s*=\s*(\d+)] Finish PID=(\d+)')
 
-# ── parse one logfile ─────────────────────────────────────────
 def parse_log(path: str):
     arrival, finish = {}, {}
-    runs: dict[int, list[tuple[int,int]]] = collections.defaultdict(list)
+    runs: dict[int, list[tuple[int,int,int]]] = collections.defaultdict(list)  # CPU → list of (start, duration, pid)
+    active: dict[tuple[int,int], int] = {}  # (pid, cpu) → start time
 
     with open(path, encoding='utf-8') as f:
         for ln in f:
-            if m := _RE_ENQ.search(ln):
-                arrival.setdefault(int(m[2]), int(m[1]))
-            elif m := _RE_RUN.search(ln):
-                runs[int(m[2])].append((int(m[1]), int(m[3])))
-            elif m := _RE_FINISH.search(ln):
-                finish[int(m[2])] = int(m[1])
+            if m := _RE_ENQ.match(ln):
+                t, pid = int(m[1]), int(m[2])
+                arrival.setdefault(pid, t)
+            elif m := _RE_ASSIGN.match(ln):
+                t, pid, cpu = int(m[1]), int(m[2]), int(m[3])
+                active[(pid, cpu)] = t
+            elif m := _RE_STOP.match(ln):
+                t, pid, cpu = int(m[1]), int(m[2]), int(m[3])
+                if (pid, cpu) in active:
+                    start = active.pop((pid, cpu))
+                    runs[cpu].append((start, t - start, pid))
+            elif m := _RE_FINISH.match(ln):
+                t, pid = int(m[1]), int(m[2])
+                finish[pid] = t
+                for (p, c), start in list(active.items()):
+                    if p == pid:
+                        runs[c].append((start, t - start, pid))
+                        active.pop((p, c))
 
-    missing = [p for p in arrival if p not in finish]
-    if missing:
-        raise ValueError(f"{path}: PIDs never finished → {missing}")
-    return arrival, runs, finish
+    return arrival, finish, runs
 
-# ── metric table ──────────────────────────────────────────────
-def metrics(arrival,runs,finish):
-    rows=[]
-    for pid in sorted(arrival):
-        burst = sum(d for _,d in runs[pid])
-        tat   = finish[pid] - arrival[pid]
-        wt    = tat - burst
-        rows.append((pid, arrival[pid], burst, tat, wt))
-    return rows
-
-# ── gantt helper ──────────────────────────────────────────────
-def gantt(rows,runs,out_png):
+def gantt(runs, out_png):
     try:
         import matplotlib.pyplot as plt
+        import matplotlib.cm as cm
+        import matplotlib.colors as mcolors
     except ImportError:
         sys.exit("matplotlib required for --gantt (pip install matplotlib)")
-    fig,ax = plt.subplots(figsize=(8, 0.5 + 0.4*len(rows)))
-    yticks,labels=[],[]
-    for i,(pid,*_) in enumerate(rows):
-        for s,d in runs[pid]:
-            ax.broken_barh([(s,d)], (i-0.4,0.8))
-        yticks.append(i); labels.append(f"PID{pid}")
-    ax.set_yticks(yticks); ax.set_yticklabels(labels)
-    ax.set_xlabel("time (ns)")
-    ax.set_title(pathlib.Path(out_png).name)
-    fig.tight_layout(); fig.savefig(out_png); plt.close(fig)
 
-# ── command-line interface ────────────────────────────────────
+    # Get unique PIDs to assign consistent colors
+    all_pids = {pid for tasks in runs.values() for _, _, pid in tasks}
+    pid_list = sorted(all_pids)
+    cmap = cm.get_cmap("tab20", len(pid_list))
+    color_map = {pid: cmap(i) for i, pid in enumerate(pid_list)}
+
+    cpus = sorted(runs)
+    fig, ax = plt.subplots(figsize=(10, 0.6 * len(cpus)))
+    yticks, ylabels = [], []
+
+    for i, cpu in enumerate(cpus):
+        for start, dur, pid in runs[cpu]:
+            ax.broken_barh([(start, dur)], (i - 0.4, 0.8), facecolors=color_map[pid])
+            ax.text(start + dur / 2, i, f'PID{pid}', ha='center', va='center', fontsize=8, color='white')
+        yticks.append(i)
+        ylabels.append(f'CPU{cpu}')
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels)
+    ax.set_xlabel("Time (ns)")
+    ax.set_title(pathlib.Path(out_png).name)
+    fig.tight_layout()
+    fig.savefig(out_png)
+    plt.close(fig)
+
 def main():
     ap = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=textwrap.dedent(__doc__))
-    ap.add_argument("log")
-    ap.add_argument("--csv")
-    ap.add_argument("--gantt")
-    ap.add_argument("--avg", action="store_true")
-    ap.add_argument("--quiet", action="store_true")
+        description=textwrap.dedent(__doc__)
+    )
+    ap.add_argument("log", help="path to the simulation log file")
+    ap.add_argument("--csv", help="write per-PID metrics to CSV")
+    ap.add_argument("--gantt", help="output PNG path for Gantt chart")
+    ap.add_argument("--avg", action="store_true", help="print average waiting and turnaround time")
+    ap.add_argument("--quiet", action="store_true", help="suppress per-PID output")
     args = ap.parse_args()
 
-    arr,runs,fin = parse_log(args.log)
-    rows = metrics(arr,runs,fin)
-
-    if args.csv:
-        with open(args.csv,"w",newline='') as f:
-            w=csv.writer(f)
-            w.writerow(("PID","Arrival","Burst","Turnaround","Waiting"))
-            w.writerows(rows)
+    arr, fin, runs = parse_log(args.log)
 
     if args.gantt:
-        gantt(rows,runs,args.gantt)
-
-    if not args.quiet:
-        for r in rows:
-            print(f"PID {r[0]:>3} | arr={r[1]:>5}  burst={r[2]:>4}  "
-                  f"TAT={r[3]:>5}  WT={r[4]:>5}")
-
-    if args.avg:
-        wt = statistics.fmean(r[4] for r in rows)
-        tat= statistics.fmean(r[3] for r in rows)
-        print(f"{wt:.2f} {tat:.2f}")
+        gantt(runs, args.gantt)
 
 if __name__ == "__main__":
     main()

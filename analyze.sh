@@ -1,40 +1,48 @@
 #!/usr/bin/env bash
-# ------------------------------------------------------------
-# analyze.sh – harvest simulate_cfs logs in ./output
-#   ▸ creates ./metrics/  with:
-#       • <case>.csv   tidy per-process metrics
-#       • <case>.png   simple Gantt chart
-#   ▸ prints a summary table to the console
-# ------------------------------------------------------------
 set -euo pipefail
+
+BIN=simulate_cfs
+TESTDIR=./testcase
 OUTDIR=./output
-METRICDIR=./metrics
-SCRIPT=./tools/parse_cfs.py     # see section 2
-mkdir -p "$METRICDIR"
+MLQOUT=./output_mlq
+METRIC_CFS=./metrics
+METRIC_MLQ=./metrics_mlq
+PARSER=./tools/parse_cfs.py
+SIM_MLQ=./tools/sim_mlq.py
 
+mkdir -p "$OUTDIR" "$MLQOUT" "$METRIC_CFS" "$METRIC_MLQ"
+# mkdir -p "$MLQOUT" "$METRIC_MLQ"
+
+echo "🛠 Building CFS…"
+make -s clean && make -s
+
+echo "🚀 Running CFS testcases…"
+for tc in "$TESTDIR"/*.{in}; do
+  [[ -e "$tc" ]] || continue
+  b=$(basename "$tc")
+  out="$OUTDIR/${b%.*}.out"
+  "./$BIN" "$tc" | tee "$out"
+done
+
+echo "📊 Parsing CFS logs…"
 for log in "$OUTDIR"/*.out; do
-  [[ -e "$log" ]] || continue
-  name=$(basename "${log%.out}")
-  python3 "$SCRIPT" "$log" \
-         --csv  "$METRICDIR/$name.csv" --avg\
-         --gantt "$METRICDIR/$name.png"
-  read wt tat <<<"$(python3 "$SCRIPT" "$log")"
+  b=$(basename "${log%.out}")
+  python3 "$PARSER" "$log" \
+    --csv "$METRIC_CFS/$b.csv" --gantt "$METRIC_CFS/$b.png" --avg > /dev/null
+done
+echo "✅ CFS metrics → $METRIC_CFS/"
+
+echo "🚀 Running MLQ testcases…"
+for tc in "$TESTDIR"/*.in; do
+  b=$(basename "${tc%.in}")
+  out="$MLQOUT/$b.out"
+  python3 "$SIM_MLQ" "$tc" | tee "$out"
 done
 
-echo "✅  Metrics & charts written to $METRICDIR/"
-
-# 1. run MLQ on every workload
-mkdir -p output_mlq
-for f in testcase/*.in; do
-    base=$(basename "${f%.in}")
-    python3 tools/sim_mlq.py "$f" > "output_mlq/${base}.out"
+echo "📊 Parsing MLQ logs…"
+for log in "$MLQOUT"/*.out; do
+  b=$(basename "${log%.out}")
+  python3 "$PARSER" "$log" \
+    --csv "$METRIC_MLQ/$b.csv" --gantt "$METRIC_MLQ/$b.png" --avg > /dev/null
 done
-
-# 2. reuse your parser
-mkdir -p metrics_mlq
-for log in output_mlq/*.out; do
-    base=$(basename "${log%.out}")
-    python3 tools/parse_cfs.py "$log" \
-           --csv "metrics_mlq/${base}.csv" --avg\
-            --gantt "metrics_mlq/${base}.png"
-done
+echo "✅ MLQ metrics → $METRIC_MLQ/"

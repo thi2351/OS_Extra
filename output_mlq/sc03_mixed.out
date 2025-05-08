@@ -1,46 +1,25 @@
-[t=   0] enqueue PID=1
-[t=   0] enqueue PID=2
-[t=   0] run PID=1 for   10
-[t=  10] enqueue PID=3
-[t=  10] run PID=1 for   10
-[t=  20] enqueue PID=4
-[t=  20] run PID=1 for   10
-[t=  30] run PID=1 for   10
-[t=  40] enqueue PID=5
-[t=  40] run PID=1 for   10
-[t=  50] enqueue PID=6
-[t=  50] run PID=1 for   10
-[t=  60] run PID=1 for   10
-[t=  70] run PID=1 for   10
-[t=  80] run PID=1 for   10
-[t=  90] run PID=1 for   10
-[t= 100] finish PID=1
-[t= 100] run PID=4 for   10
-[t= 110] run PID=4 for   10
-[t= 120] run PID=4 for   10
-[t= 130] run PID=4 for   10
-[t= 140] run PID=4 for   10
-[t= 150] run PID=4 for   10
-[t= 160] run PID=4 for   10
-[t= 170] run PID=4 for   10
-[t= 180] finish PID=4
-[t= 180] run PID=2 for   10
-[t= 190] run PID=6 for   10
-[t= 200] run PID=2 for   10
-[t= 210] run PID=6 for   10
-[t= 220] run PID=2 for   10
-[t= 230] run PID=6 for   10
-[t= 240] run PID=2 for   10
-[t= 250] run PID=6 for   10
-[t= 260] run PID=2 for   10
-[t= 270] run PID=6 for   10
-[t= 280] finish PID=6
-[t= 280] run PID=2 for   10
-[t= 290] finish PID=2
-[t= 290] run PID=3 for   10
-[t= 300] run PID=3 for   10
-[t= 310] run PID=3 for   10
-[t= 320] finish PID=3
-[t= 320] run PID=5 for   10
-[t= 330] finish PID=5
-All done at t=330
+[t = 0] Enqueue PID=1
+[t = 0] Assigned process with PID=1 to CPU 1
+[t = 0] Enqueue PID=2
+[t = 0] Assigned process with PID=2 to CPU 2
+[t = 10] Enqueue PID=3
+[t = 10] Assigned process with PID=3 to CPU 3
+[t = 20] Enqueue PID=4
+[t = 20] Assigned process with PID=4 to CPU 4
+[t = 35] Enqueue PID=5
+[t = 40] Stopped PID=3 in CPU 3
+[t = 40] Finish PID=3
+[t = 40] Assigned process with PID=5 to CPU 3
+[t = 50] Enqueue PID=6
+[t = 50] Stopped PID=5 in CPU 3
+[t = 50] Finish PID=5
+[t = 50] Assigned process with PID=6 to CPU 3
+[t = 60] Stopped PID=2 in CPU 2
+[t = 60] Finish PID=2
+[t = 100] Stopped PID=1 in CPU 1
+[t = 100] Finish PID=1
+[t = 100] Stopped PID=4 in CPU 4
+[t = 100] Finish PID=4
+[t = 100] Stopped PID=6 in CPU 3
+[t = 100] Finish PID=6
+[t = 100] All done at t = 100

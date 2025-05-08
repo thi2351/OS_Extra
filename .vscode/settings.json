@@ -4,7 +4,6 @@
         "compare": "c",
         "stdlib.h": "c",
         "common.h": "c",
-        "heap.h": "c",
-        "cpu.h": "c"
+        "random": "c"
     }
 }

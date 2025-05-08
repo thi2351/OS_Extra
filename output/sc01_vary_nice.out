@@ -1,13 +1,49 @@
-[t=   0] enqueue PID=1
-[t=   0] enqueue PID=4
-[t=   0] enqueue PID=3
-[t=   0] enqueue PID=2
-[t=   0] run PID=1 for   80
-[t=  80] finish PID=1
-[t=  80] run PID=2 for   80
-[t= 160] finish PID=2
-[t= 160] run PID=3 for   80
-[t= 240] finish PID=3
-[t= 240] run PID=4 for   80
-[t= 320] finish PID=4
-All done at t=320
+[t = 0] Enqueue PID=1 
+[t = 0] Enqueue PID=2 
+[t = 0] Enqueue PID=3 
+[t = 0] Enqueue PID=4 
+[t = 0] Assigned process with PID=1 to CPU 1
+[t = 0] Assigned process with PID=2 to CPU 2
+[t = 0] Assigned process with PID=3 to CPU 3
+[t = 0] Assigned process with PID=4 to CPU 4
+[t = 10] Stopped PID=3 in CPU 3
+[t = 10] Assigned process with PID=3 to CPU 3
+[t = 10] Stopped PID=4 in CPU 4
+[t = 10] Assigned process with PID=4 to CPU 4
+[t = 18] Stopped PID=2 in CPU 2
+[t = 18] Assigned process with PID=2 to CPU 2
+[t = 20] Stopped PID=3 in CPU 3
+[t = 20] Assigned process with PID=3 to CPU 3
+[t = 20] Stopped PID=4 in CPU 4
+[t = 20] Assigned process with PID=4 to CPU 4
+[t = 30] Stopped PID=3 in CPU 3
+[t = 30] Assigned process with PID=3 to CPU 3
+[t = 30] Stopped PID=4 in CPU 4
+[t = 30] Assigned process with PID=4 to CPU 4
+[t = 36] Stopped PID=2 in CPU 2
+[t = 36] Assigned process with PID=2 to CPU 2
+[t = 40] Stopped PID=3 in CPU 3
+[t = 40] Assigned process with PID=3 to CPU 3
+[t = 40] Stopped PID=4 in CPU 4
+[t = 40] Assigned process with PID=4 to CPU 4
+[t = 50] Stopped PID=3 in CPU 3
+[t = 50] Assigned process with PID=3 to CPU 3
+[t = 50] Stopped PID=4 in CPU 4
+[t = 50] Assigned process with PID=4 to CPU 4
+[t = 54] Stopped PID=2 in CPU 2
+[t = 54] Assigned process with PID=2 to CPU 2
+[t = 60] Stopped PID=3 in CPU 3
+[t = 60] Assigned process with PID=3 to CPU 3
+[t = 60] Stopped PID=4 in CPU 4
+[t = 60] Assigned process with PID=4 to CPU 4
+[t = 70] Stopped PID=3 in CPU 3
+[t = 70] Assigned process with PID=3 to CPU 3
+[t = 70] Stopped PID=4 in CPU 4
+[t = 70] Assigned process with PID=4 to CPU 4
+[t = 72] Stopped PID=2 in CPU 2
+[t = 72] Assigned process with PID=2 to CPU 2
+[t = 80] Finish PID=1
+[t = 80] Finish PID=2
+[t = 80] Finish PID=3
+[t = 80] Finish PID=4
+All done at t = 80

@@ -28,6 +28,14 @@ Chỉnh sửa
 | **test04_preemption** | Demonstrates immediate pre-emption when a lower-vruntime task appears. |
 | **test05_min_granularity** | Ensures the scheduler obeys `MIN_GRANULARITY_NSEC` and terminates tiny tasks. |
 
+
+|Test | Goal |
+|------|------|
+|**test01_singleCPU** | Interupt handling when new process arrival. |
+|**test02_singleCPU** | Timeslice handling when remain time < `MIN_GRANULARITY_NSEC` |
+|**test03_multiCPU** | Multi CPU handling of **test01_singleCPU** |
+|**test04_multiCPU** | Multi CPU handling use least-work CPU |
+
 ## Running
 
 ```bash

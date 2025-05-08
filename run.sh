@@ -1,32 +1,34 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------
-# run.sh – build & execute every CFS test in ./testcase
+# run.sh – build & execute all CFS tests in ./testcase
 #           outputs saved to ./output
 # ----------------------------------------------------------
 set -euo pipefail
 
+# Configuration
 BIN=simulate_cfs
 TESTDIR=./testcase
 OUTDIR=./output
 EXT=("*.in" "*.txt")     # accepted extensions
 
+# Ensure output directory exists
 mkdir -p "$OUTDIR"
 
-echo "🛠  Building project …"
-make -s clean
-make  -s
+# Build
+echo "🛠  Building project…"
+make clean > /dev/null
+make all    > /dev/null
 
+# Run test suite
 echo "🚀  Executing test-suite"
 for pat in "${EXT[@]}"; do
-  for tc in $TESTDIR/$pat; do
+  for tc in "$TESTDIR"/$pat; do
     [[ -e "$tc" ]] || continue
     name=$(basename "$tc")
     out="$OUTDIR/${name%.*}.out"
-    echo "——————————————————————————————————————"
-    echo "▶ $name  →  $(basename "$out")"
+    printf "\n▶ Running %-20s → %-20s\n" "$name" "$(basename "$out")"
     "./$BIN" "$tc" | tee "$out"
   done
 done
 
-echo "✅  Outputs written to $OUTDIR/"
-./analyze.sh
+echo -e "\n✅  All outputs written to $OUTDIR/"

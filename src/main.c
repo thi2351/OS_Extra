@@ -11,6 +11,10 @@
 #include <assert.h>
 
 
+
+//Turn on/off how print.
+// #define SHOW_PRINT
+
 static int arrival_cmp(const void *a, const void *b) {
     const event_t *e1 = a;
     const event_t *e2 = b;
@@ -46,6 +50,11 @@ void load_processes(const char *filename,
     int n, cpu;
     if (fscanf(fp, "%d %d", &cpu, &n) != 2 || n <= 0 || cpu <= 0) {
         fprintf(stderr, "Error: invalid process count in '%s'\n", filename);
+        if (cpu < n) {
+            fprintf(stderr, "Error: CPU count (%d) cannot be less than process count (%d)\n", cpu, n);
+        } else if (cpu > 12) { // MAX_CPU
+            fprintf(stderr, "Error: CPU count (%d) exceeds maximum (%d)\n", cpu, 12);
+        }
         fclose(fp);
         exit(EXIT_FAILURE);
     }
@@ -99,19 +108,34 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
         event_t ev;
         event_tree_pop(&ev_t, &ev);
         t = ev.time;
-        printf("================================================\n");
-        printf("Time stamp: %llu \n", (unsigned long long)t);
+
+        #ifdef SHOW_PRINT
+            printf("================================================\n");
+            printf("Time stamp: %llu \n", (unsigned long long)t);
+        #endif
+
         if (ev.ev == EVENT_ARRIVAL) {
             // Step 1: Enqueue all process and dispatch the needed process;
             int entering_proc = 1;
             cfs_enqueue(ev.proc);
-            printf("Enqueue PID=%u\n", ev.proc->pid);
+
+            #ifdef SHOW_PRINT
+                printf("Enqueue PID=%u\n", ev.proc->pid);
+            #else
+                printf("[t = %llu] Enqueue PID=%u \n", t, ev.proc->pid);
+            #endif
+
             event_t start_ev;
             while (event_tree_peek(&ev_t, &start_ev) && start_ev.ev == EVENT_ARRIVAL && start_ev.time == t) {
                 entering_proc++;
                 event_tree_pop(&ev_t, &start_ev);
                 cfs_enqueue(start_ev.proc);
-                printf("Enqueue PID=%u\n", start_ev.proc->pid);
+
+                #ifdef SHOW_PRINT
+                    printf("Enqueue PID=%u\n", start_ev.proc->pid);
+                #else
+                    printf("[t = %llu] Enqueue PID=%u \n", t, start_ev.proc->pid);
+                #endif
             }
             //Step 2: Preempt some CPU that expired new timeslice:
             for (int i = 0; i < num_cpu; i++) {
@@ -119,7 +143,7 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
                 pcb_t *p = c->running_process;
                 if (!p) continue;
                 int idx = (int)(p - pcbs);
-                uint32_t new_timeslice = cfs_timeslice(p, cpu_m.total_weight_proc);
+                uint32_t new_timeslice = min(cfs_timeslice(p, cpu_m.total_weight_proc), remain[idx]);
                 uint32_t old_timeslice = time_slice[idx];
                 uint32_t run_for = t - c->last_dispatch;
                 uint32_t remains = remain[idx];
@@ -133,7 +157,12 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
                         cfs_dequeue(p);
                     }
                     c->running_process = NULL;
-                    printf("Expired time-slice of PID=%u in CPU %u due to new process arrival\n", p->pid, c->cpu_id);
+
+                    #ifdef SHOW_PRINT
+                        printf("Expired time-slice of PID=%u in CPU %u due to new process arrival\n", p->pid, i + 1);
+                    #else
+                        printf("[t = %llu] Stopped PID=%u in CPU %u\n", t, p->pid, i + 1);
+                    #endif
                 }
                 else {
                     event_t new_end = make_event(c, EVENT_END, p, c->last_dispatch + new_timeslice); 
@@ -149,7 +178,11 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
                 entering_proc--;
                 cpu_dispatch(p, t);
                 cfs_dequeue(p);
-                printf("Assigned process with PID=%u to CPU %u\n", p->pid, c->cpu_id);
+                #ifdef SHOW_PRINT
+                    printf("Assigned process with PID=%u to CPU %u\n", p->pid, c->cpu_id);
+                #else
+                    printf("[t = %llu] Assigned process with PID=%u to CPU %u\n", t , p->pid, c->cpu_id);
+                #endif
                 uint64_t slice = cfs_timeslice(p, cpu_m.total_weight_proc);
                 int    idx   = (int)(p - pcbs);
                 uint64_t run = slice < (uint64_t)remain[idx] ? slice : (uint64_t)remain[idx];
@@ -194,8 +227,13 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
                     pcb_t *p2 = cfs_pick_next();
                     cpu_dispatch(p2, t);
                     cfs_dequeue(p2);
-                    printf("Preempt process PID=%u and entering process PID=%u to CPU %u\n", 
+                    #ifdef SHOW_PRINT
+                        printf("Preempt process PID=%u and entering process PID=%u to CPU %u\n", 
                         p1->pid, p2->pid, c->cpu_id);
+                    #else
+                        printf("[t = %llu] Stopped PID=%u in CPU %u\n", t, p1->pid, c->cpu_id);
+                        printf("[t = %llu] Assigned process with PID=%u to CPU %u\n", t, p2->pid, c->cpu_id);
+                    #endif
                     uint64_t slice = cfs_timeslice(p2, cpu_m.total_weight_proc);
                     int    idx   = (int)(p2 - pcbs);
                     uint64_t run = slice < (uint64_t)remain[idx] ? slice : (uint64_t)remain[idx];
@@ -219,10 +257,19 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
             if (remain[idx] == 0) {
                 cfs_dequeue(p);
                 done++;
-                printf("Finish PID=%u\n", p->pid);
+                #ifdef SHOW_PRINT
+                    printf("Finish PID=%u\n", p->pid);
+                #else
+                    printf("[t = %llu] Finish PID=%u\n", t, p->pid);
+                #endif
             }
             else {
-                printf("Expired time-slice of PID=%u in CPU %u\n", p->pid, c->cpu_id);
+                #ifdef SHOW_PRINT
+                    printf("Expired time-slice of PID=%u in CPU %u\n", p->pid, c->cpu_id);
+                #else
+                    printf("[t = %llu] Stopped PID=%u in CPU %u\n", t, p->pid, c->cpu_id);
+                #endif
+
             }
 
             pcb_t *next2 = cfs_pick_next();
@@ -240,12 +287,21 @@ void simulate_cfs(pcb_t *pcbs, int *arrival, int *remain, int num_cpu, int num_p
                 event_tree_insert(&ev_t, &ne2);
                 time_slice[ni] = (int)run3;
                 cpu_m.cpu_list[idx].last_dispatch = t;
-                printf("Assigned process with PID=%u to CPU %u\n", next2->pid, idx+1);
+                #ifdef SHOW_PRINT
+                    printf("Assigned process with PID=%u to CPU %u\n", next2->pid, idx+1);
+                #else
+                    printf("[t = %llu] Assigned process with PID=%u to CPU %u\n", t , next2->pid, idx+1);
+                #endif
             }
         }
     }
-    printf("================================================\n");
-    printf("All done at Time stamp = %llu\n", (unsigned long long)t);
+    #ifdef SHOW_PRINT
+        printf("================================================\n");
+        printf("All done at Time stamp = %llu\n", (unsigned long long)t);
+    #else
+        printf("All done at t = %llu\n", (unsigned long long)t);
+    #endif
+
     event_tree_destroy(&ev_t);
     cpu_destroy();
     free(finished);

@@ -1,99 +1,83 @@
 #!/usr/bin/env python3
-"""
-sim_mlq.py  –  stand-alone MLQ scheduler for OS_Extra test-cases
-─────────────────────────────────────────────────────────────────────
-Input  : <workload>.in  (same 4-column format used by simulate_cfs)
-Output : prints log lines:
-           [t=   X] enqueue PID=n
-           [t=   X] run PID=n for   D
-           [t=   X] finish PID=n
-         identical to CFS logs → can be parsed by parse_cfs.py
+import sys, heapq, collections
 
-MLQ policy (faithful to assignment):
-  • Niceness (–20 … +19) is mapped to priority level P = nice + 20
-    (0 = highest, 39 = lowest).
-  • System has 40 queues; index P holds that priority’s PCBs.
-  • CPU visits queues in priority order, each queue granted
-      slot = MAX_PRIOS – P   time quanta (see assignment).
-  • Quantum = 10 ns (matches MIN_GRANULARITY_NSEC used in CFS part).
-  • Round-robin inside each queue.
-
-This is *good enough* for comparative metrics (WT / TAT) with CFS.
-"""
-
-import sys, heapq, collections, argparse, pathlib
-
-MAX_P = 40                  # priority levels (0..39)
-QUANT = 10                  # 10 ns time slice
-SLOT_FACTOR = MAX_P         # slot = MAX_P – priority
+QUANTUM = 200
+MAXPRIO = 40  # niceness -20..19 → 0..39
 
 class PCB:
-    __slots__ = ("pid","prio","remain")
-    def __init__(self,pid,prio,burst):
-        self.pid = pid; self.prio = prio; self.remain = burst
+    def __init__(self, pid, nice, at, bt):
+        self.pid = pid
+        self.nice = nice
+        self.prio = max(0, min(nice + 20, MAXPRIO - 1))
+        self.arrival = at
+        self.remain = bt
 
-# ── replace the old load() with: ─────────────────────────────
 def load(path):
-    """return [(arrival_time, PCB), …] sorted by arrival_time"""
-    procs=[]
     with open(path) as f:
-        n = int(f.readline().strip())
+        num_cpus, n = map(int, f.readline().split())
+        procs = []
         for _ in range(n):
-            line = f.readline().strip()
-            if not line:            # skip empty lines if any
-                continue
-            pid,nice,at,bt = map(int, line.split())
-            prio = nice + 20 if -20 <= nice <= 19 else 39
-            procs.append((at, PCB(pid, prio, bt)))
-    return sorted(procs, key=lambda x: x[0])   # ← key-function added
+            pid, nice, at, bt = map(int, f.readline().split())
+            procs.append((at, PCB(pid, nice, at, bt)))
+    return num_cpus, sorted(procs, key=lambda x: x[0])
 
+def sim_mlq(path):
+    num_cpus, arrivals = load(path)
+    queues = [collections.deque() for _ in range(MAXPRIO)]
+    cpus = [None] * num_cpus
 
-def mlq_run(inp):
-    arrivals = load(inp)
-    arr_idx = 0
-    t = 0
-    queues = [collections.deque() for _ in range(MAX_P)]
+    time = 0
+    event_q = []
+    counter = 0
     finished = 0
     total = len(arrivals)
 
-    def enqueue(pcb):
-        queues[pcb.prio].append(pcb)
-        print(f"[t={t:4d}] enqueue PID={pcb.pid}")
+    def push(t, typ, *args):
+        nonlocal counter
+        heapq.heappush(event_q, (t, typ, counter, *args))
+        counter += 1
 
-    while finished < total:
-        # bring in arrivals at current time
-        while arr_idx < total and arrivals[arr_idx][0] == t:
-            enqueue(arrivals[arr_idx][1]); arr_idx += 1
-        # if no runnable, fast-forward to next arrival
-        if all(not q for q in queues):
-            nxt = arrivals[arr_idx][0]
-            t = nxt
-            continue
+    for at, pcb in arrivals:
+        push(at, 'arrive', pcb)
 
-        # iterate priority queues
-        for p in range(MAX_P):
-            if not queues[p]: continue
-            slot = SLOT_FACTOR - p               # number of quanta
-            while slot and queues[p]:
-                pcb = queues[p].popleft()
-                run_ns = min(QUANT, pcb.remain)
-                print(f"[t={t:4d}] run PID={pcb.pid} for {run_ns:4d}")
-                pcb.remain -= run_ns
-                t += run_ns
-                # enqueue new arrivals that occurred during run
-                while arr_idx < total and arrivals[arr_idx][0] <= t:
-                    enqueue(arrivals[arr_idx][1]); arr_idx += 1
-                if pcb.remain == 0:
-                    finished += 1
-                    print(f"[t={t:4d}] finish PID={pcb.pid}")
-                else:
-                    queues[p].append(pcb)
-                slot -= 1
-            # after consuming its slot, move to next queue
-    print(f"All done at t={t}")
+    while event_q:
+        t, typ, _, *args = heapq.heappop(event_q)
+
+        if typ == 'arrive':
+            pcb = args[0]
+            print(f"[t = {t}] Enqueue PID={pcb.pid}")
+            queues[pcb.prio].append(pcb)
+
+        elif typ == 'stop':
+            cpu_id, pcb = args
+            print(f"[t = {t}] Stopped PID={pcb.pid} in CPU {cpu_id + 1}")
+            pcb.remain -= QUANTUM
+            if pcb.remain > 0:
+                print(f"[t = {t}] Enqueue PID={pcb.pid}")
+                queues[pcb.prio].append(pcb)
+            else:
+                print(f"[t = {t}] Finish PID={pcb.pid}")
+                finished += 1
+            cpus[cpu_id] = None
+
+        # Try to assign processes to free CPUs
+        for i in range(num_cpus):
+            if cpus[i] is None:
+                for q in queues:
+                    if q:
+                        proc = q.popleft()
+                        cpus[i] = (proc, t)
+                        print(f"[t = {t}] Assigned process with PID={proc.pid} to CPU {i + 1}")
+                        slice = min(QUANTUM, proc.remain)
+                        push(t + slice, 'stop', i, proc)
+                        break
+
+        if finished == total and not any(cpus):
+            print(f"[t = {t}] All done at t = {t}")
+            break
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="MLQ simulator")
-    ap.add_argument("infile", help="work-load *.in")
-    args = ap.parse_args()
-    mlq_run(args.infile)
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <workload.in>")
+        sys.exit(1)
+    sim_mlq(sys.argv[1])

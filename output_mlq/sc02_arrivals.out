@@ -1,38 +1,21 @@
-[t=   0] enqueue PID=1
-[t=   0] run PID=1 for   10
-[t=  10] enqueue PID=2
-[t=  10] run PID=1 for   10
-[t=  20] enqueue PID=3
-[t=  20] run PID=1 for   10
-[t=  30] enqueue PID=4
-[t=  30] run PID=4 for   10
-[t=  40] enqueue PID=5
-[t=  40] run PID=1 for   10
-[t=  50] run PID=4 for   10
-[t=  60] run PID=1 for   10
-[t=  70] run PID=4 for   10
-[t=  80] finish PID=4
-[t=  80] run PID=1 for   10
-[t=  90] run PID=1 for   10
-[t= 100] run PID=1 for   10
-[t= 110] run PID=1 for   10
-[t= 120] run PID=1 for   10
-[t= 130] run PID=1 for   10
-[t= 140] run PID=1 for   10
-[t= 150] finish PID=1
-[t= 150] run PID=3 for   10
-[t= 160] run PID=3 for   10
-[t= 170] run PID=3 for   10
-[t= 180] run PID=3 for   10
-[t= 190] run PID=3 for   10
-[t= 200] run PID=3 for   10
-[t= 210] finish PID=3
-[t= 210] run PID=2 for   10
-[t= 220] run PID=5 for   10
-[t= 230] run PID=2 for   10
-[t= 240] run PID=5 for   10
-[t= 250] finish PID=5
-[t= 250] run PID=2 for   10
-[t= 260] run PID=2 for   10
-[t= 270] finish PID=2
-All done at t=270
+[t = 0] Enqueue PID=1
+[t = 0] Assigned process with PID=1 to CPU 1
+[t = 8] Enqueue PID=2
+[t = 8] Assigned process with PID=2 to CPU 2
+[t = 15] Enqueue PID=3
+[t = 25] Enqueue PID=4
+[t = 40] Enqueue PID=5
+[t = 48] Stopped PID=2 in CPU 2
+[t = 48] Finish PID=2
+[t = 48] Assigned process with PID=5 to CPU 2
+[t = 68] Stopped PID=5 in CPU 2
+[t = 68] Finish PID=5
+[t = 68] Assigned process with PID=4 to CPU 2
+[t = 98] Stopped PID=4 in CPU 2
+[t = 98] Finish PID=4
+[t = 98] Assigned process with PID=3 to CPU 2
+[t = 120] Stopped PID=1 in CPU 1
+[t = 120] Finish PID=1
+[t = 158] Stopped PID=3 in CPU 2
+[t = 158] Finish PID=3
+[t = 158] All done at t = 158
